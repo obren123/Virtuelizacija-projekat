@@ -1,13 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36511.14 d17.14
+VisualStudioVersion = 17.14.36511.14
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WeatherStationCommon", "WeatherStationCommon\WeatherStationCommon.csproj", "{712CFC54-8907-473D-B8C2-1795710A61A2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "WeatherStationCommon\Common.csproj", "{712CFC54-8907-473D-B8C2-1795710A61A2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WeatherStationServer", "WeatherStationServer\WeatherStationServer.csproj", "{C51F9162-F00C-4331-BA5E-7CE36ED1583B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server", "WeatherStationServer\Server.csproj", "{C51F9162-F00C-4331-BA5E-7CE36ED1583B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WeatherStationClient", "WeatherStationClient\WeatherStationClient.csproj", "{EE4358A4-A79E-481A-BCFE-6A383038830F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "WeatherStationClient\Client.csproj", "{EE4358A4-A79E-481A-BCFE-6A383038830F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

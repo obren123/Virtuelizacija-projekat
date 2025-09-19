@@ -53,9 +53,9 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\WeatherStationCommon\WeatherStationCommon.csproj">
+    <ProjectReference Include="..\WeatherStationCommon\Common.csproj">
       <Project>{712cfc54-8907-473d-b8c2-1795710a61a2}</Project>
-      <Name>WeatherStationCommon</Name>
+      <Name>Common</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
