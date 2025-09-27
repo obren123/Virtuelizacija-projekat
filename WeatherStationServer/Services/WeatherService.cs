@@ -149,36 +149,39 @@ namespace Server.Services
         private void AnalyzeSpecificHumidity(WeatherSample sample)
         {
             _sampleCount++;
-            _shMean = _shMean + (sample.sh - _shMean) / _sampleCount;
+            _shMean += (sample.sh - _shMean) / _sampleCount;
 
-            if (!double.IsNaN(_previousSh))
+            if (double.IsNaN(_previousSh))
             {
-                double deltaSh = sample.sh - _previousSh;
+                _previousSh = sample.sh;
+                return;
+            }
 
-                if (Math.Abs(deltaSh) > _shThreshold)
-                {
-                    string direction = deltaSh > 0 ? "above" : "below";
-                    string message = $"SH spike detected: {Math.Abs(deltaSh):F2} ({direction} threshold)";
-                    _events.RaiseOnWarningRaised(message);
-                }
+            double change = sample.sh - _previousSh;
+            if (Math.Abs(change) > _shThreshold)
+            {
+                string trend = change > 0 ? "above" : "below";
+                _events.RaiseOnWarningRaised(
+                    $"SH spike detected: {Math.Abs(change):F2} ({trend} threshold)");
+            }
 
-                double lowerBound = 0.75 * _shMean;
-                double upperBound = 1.25 * _shMean;
+            double minAllowed = _shMean * 0.75;
+            double maxAllowed = _shMean * 1.25;
 
-                if (sample.sh < lowerBound)
-                {
-                    string message = $"SH below expected range: {sample.sh:F2} < {lowerBound:F2}";
-                    _events.RaiseOnWarningRaised(message);
-                }
-                else if (sample.sh > upperBound)
-                {
-                    string message = $"SH above expected range: {sample.sh:F2} > {upperBound:F2}";
-                    _events.RaiseOnWarningRaised(message);
-                }
+            if (sample.sh < minAllowed)
+            {
+                _events.RaiseOnWarningRaised(
+                    $"SH too low: {sample.sh:F2} < {minAllowed:F2}");
+            }
+            else if (sample.sh > maxAllowed)
+            {
+                _events.RaiseOnWarningRaised(
+                    $"SH too high: {sample.sh:F2} > {maxAllowed:F2}");
             }
 
             _previousSh = sample.sh;
         }
+
 
         private double CalculateHeatIndex(double temperature, double humidity)
         {
@@ -189,22 +192,25 @@ namespace Server.Services
 
         private void AnalyzeHeatIndex(WeatherSample sample)
         {
-            double hi = CalculateHeatIndex(sample.T, sample.rh);
+            double currentHi = CalculateHeatIndex(sample.T, sample.rh);
 
-            if (!double.IsNaN(_previousHi))
+            if (double.IsNaN(_previousHi))
             {
-                double deltaHi = hi - _previousHi;
-
-                if (Math.Abs(deltaHi) > _hiThreshold)
-                {
-                    string direction = deltaHi > 0 ? "above" : "below";
-                    string message = $"HI spike detected: {Math.Abs(deltaHi):F2} ({direction} expected)";
-                    _events.RaiseOnWarningRaised(message);
-                }
+                _previousHi = currentHi;
+                return;
             }
 
-            _previousHi = hi;
+            double difference = currentHi - _previousHi;
+            if (Math.Abs(difference) > _hiThreshold)
+            {
+                string changeType = difference > 0 ? "above" : "below";
+                _events.RaiseOnWarningRaised(
+                    $"HI spike: {Math.Abs(difference):F2} ({changeType} expected)");
+            }
+
+            _previousHi = currentHi;
         }
+
 
         protected virtual void Dispose(bool disposing)
         {

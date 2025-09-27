@@ -1,5 +1,4 @@
-﻿using Common;
-using System.ServiceModel;
+﻿using System.ServiceModel;
 
 namespace Common
 {
