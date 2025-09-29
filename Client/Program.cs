@@ -35,6 +35,7 @@ namespace Client
                     Console.WriteLine($"Učitano {samples.Length} uzoraka iz CSV fajla");
                     Log(logWriter, $"Učitano {samples.Length} uzoraka");
 
+                    //7
                     using (var channelFactory = new ChannelFactory<IServiceContract>("WeatherService"))
                     {
                         var client = channelFactory.CreateChannel();

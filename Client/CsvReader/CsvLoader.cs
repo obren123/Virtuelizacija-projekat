@@ -3,111 +3,150 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Client.CsvReader
 {
     public static class CsvLoader
     {
+        /// <summary>
+        /// Učita do max 100 validnih uzoraka iz CSV-a. Nevalidne linije i linije preko 100 loguju se u logWriter.
+        /// Očekuje invariant culture (decimalna tačka) i datum formata "yyyy-MM-dd HH:mm:ss".
+        /// </summary>
         public static WeatherSample[] LoadSamplesFromCsv(string csvPath, StreamWriter logWriter)
         {
-                var samples = new List<WeatherSample>();
+            if (string.IsNullOrWhiteSpace(csvPath))
+                throw new ArgumentException("csvPath nije specificiran", nameof(csvPath));
 
-                if (!File.Exists(csvPath))
+            var samples = new List<WeatherSample>();
+
+            if (!File.Exists(csvPath))
+            {
+                string error = $"Nema CSV fajla: {csvPath}";
+                Console.WriteLine(error);
+                throw new FileNotFoundException(error);
+            }
+
+            int lineNumber = 0;
+            const int maxSamples = 100;
+            int totalLines = 0;
+            int invalidCount = 0;
+            int excessCount = 0;
+
+            try
+            {
+                using (var reader = new StreamReader(csvPath))
                 {
-                    string error = $"Nema CSV fajla: {csvPath}";
-                    Console.WriteLine(error);
-                    throw new FileNotFoundException(error);
-                }
-
-                int lineNumber = 0;
-                int maxSamples = 100;
-
-                try
-                {
-                    using (var reader = new StreamReader(csvPath))
+                    // preskoci header (ako postoji)
+                    if (!reader.EndOfStream)
                     {
-                        reader.ReadLine(); // preskoči header
+                        reader.ReadLine();
                         lineNumber++;
-
-                        while (!reader.EndOfStream && samples.Count < maxSamples)
-                        {
-                            lineNumber++;
-                            var line = reader.ReadLine();
-                            if (string.IsNullOrEmpty(line)) continue;
-
-                            var values = line.Split(',');
-
-                            try
-                            {
-                                if (values.Length >= 10)
-                                {
-                                    var sample = new WeatherSample
-                                    {
-                                        T = ParseDouble(values[2], logWriter, lineNumber, "T"),
-                                        Tpot = ParseDouble(values[3], logWriter, lineNumber, "Tpot"),
-                                        Tdew = ParseDouble(values[4], logWriter, lineNumber, "Tdew"),
-                                        rh = ParseDouble(values[5], logWriter, lineNumber, "rh"),
-                                        sh = ParseDouble(values[9], logWriter, lineNumber, "sh"),
-                                        Date = ParseDate(values[0])
-                                    };
-
-                                    samples.Add(sample);
-                                    Console.WriteLine($"Ucitani podatak: {sample.Date}");
-                                }
-                                else
-                                {
-                                    logWriter.WriteLine($"Linija {lineNumber}: Nevazeci broj kolona {values.Length}");
-                                }
-                            }
-                            catch (FormatException ex)
-                            {
-                                logWriter.WriteLine($"Linija {lineNumber}: Format error: {ex.Message}");
-                            }
-                            catch (Exception ex)
-                            {
-                                logWriter.WriteLine($"Linija {lineNumber}: Error: {ex.Message}");
-                            }
-                        }
                     }
-                    Console.WriteLine($"Završi učitavanje {samples.Count} podataka");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Greska pri citanju CSV fajla: {ex.Message}");
-                    logWriter.WriteLine($"{DateTime.Now}: Greska pri citanju CSV fajla: {ex.Message}");
-                }
-                return samples.ToArray();
+
+                    while (!reader.EndOfStream)
+                    {
+                        lineNumber++;
+                        totalLines++;
+                        var line = reader.ReadLine();
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            logWriter.WriteLine($"Linija {lineNumber}: Prazna linija");
+                            invalidCount++;
+                            continue;
+                        }
+
+                        var values = line.Split(',');
+
+                        if (values.Length < 10)
+                        {
+                            logWriter.WriteLine($"Linija {lineNumber}: Nevazeci broj kolona {values.Length}");
+                            invalidCount++;
+                            continue;
+                        }
+
+                        // Parsiraj polja (ne dodaj dok ne potvrdimo da su obavezna polja validna)
+                        bool dateOk = TryParseDate(values[0], out DateTime date);
+                        bool tOk = TryParseDouble(values[2], out double T);
+                        bool tpotOk = TryParseDouble(values[3], out double Tpot); // opcionalno može biti neobavezno
+                        bool tdewOk = TryParseDouble(values[4], out double Tdew); // opcionalno
+                        bool rhOk = TryParseDouble(values[5], out double rh);
+                        bool shOk = TryParseDouble(values[9], out double sh);
+
+                        // Definišemo obavezna polja: Date, T, rh, sh
+                        if (!dateOk)
+                        {
+                            logWriter.WriteLine($"Linija {lineNumber}: Neispravan datum '{values[0]}'");
+                            invalidCount++;
+                            continue;
+                        }
+                        if (!tOk)
+                        {
+                            logWriter.WriteLine($"Linija {lineNumber}: Neispravan T '{values[2]}'");
+                            invalidCount++;
+                            continue;
+                        }
+                        if (!rhOk)
+                        {
+                            logWriter.WriteLine($"Linija {lineNumber}: Neispravan rh '{values[5]}'");
+                            invalidCount++;
+                            continue;
+                        }
+                        if (!shOk)
+                        {
+                            logWriter.WriteLine($"Linija {lineNumber}: Neispravan sh '{values[9]}'");
+                            invalidCount++;
+                            continue;
+                        }
+
+                        // Ako već imamo 100 validnih uzoraka, prijavi kao "red viška" ali nastavi čitanje
+                        if (samples.Count >= maxSamples)
+                        {
+                            excessCount++;
+                            //logWriter.WriteLine($"Linija {lineNumber}: Red viška (preko {maxSamples})");
+                            continue;
+                        }
+
+                        // Svi obavezni su ok -> dodaj uzorak
+                        var sample = new WeatherSample
+                        {
+                            Date = date,
+                            T = T,
+                            Tpot = tpotOk ? Tpot : double.NaN,
+                            Tdew = tdewOk ? Tdew : double.NaN,
+                            rh = rh,
+                            sh = sh
+                        };
+
+                        samples.Add(sample);
+                        Console.WriteLine($"Ucitani podatak ({samples.Count}): {sample.Date:yyyy-MM-dd HH:mm:ss}");
+                    } // kraj while
+                } // using reader
+
+                Console.WriteLine($"Završi učitavanje: učitano {samples.Count} validnih od ukupno {totalLines} linija (nevalidnih: {invalidCount}, viška: {excessCount})");
+                logWriter.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - Učitano {samples.Count} validnih od ukupno {totalLines} linija (nevalidnih: {invalidCount}, viška: {excessCount})");
+                logWriter.Flush();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Greska pri citanju CSV fajla: {ex.Message}");
+                logWriter.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - Greska pri citanju CSV fajla: {ex.Message}");
+                logWriter.Flush();
+            }
+
+            return samples.ToArray();
         }
 
-            private static double ParseDouble(string s, StreamWriter logWriter, int lineNumber, string columnName)
-            {
-                if (string.IsNullOrWhiteSpace(s))
-                {
-                    logWriter.WriteLine($"Linija {lineNumber}: Prazna vrednost u koloni {columnName}");
-                    return double.NaN;
-                }
+        private static bool TryParseDouble(string s, out double value)
+        {
+            value = double.NaN;
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            return double.TryParse(s, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        }
 
-                if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
-                    return value;
-
-                logWriter.WriteLine($"Linija {lineNumber}: Nevazeci dabl '{s}' za {columnName}");
-                return double.NaN;
-            }
-
-            private static DateTime ParseDate(string s)
-            {
-                return DateTime.TryParseExact(
-                                    s,
-                                    "yyyy-MM-dd HH:mm:ss",
-                                    CultureInfo.InvariantCulture,
-                                    DateTimeStyles.None,
-                                    out var d
-                                ) ? d : DateTime.MinValue;
-            }
+        private static bool TryParseDate(string s, out DateTime d)
+        {
+            // format "yyyy-MM-dd HH:mm:ss" kako si ranije koristio
+            return DateTime.TryParseExact(s, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out d);
+        }
     }
 }
-
-

@@ -2,7 +2,7 @@
 using System;
 using System.ServiceModel;
 
-namespace WeatherStationServer
+namespace Server
 {
     class Program
     {
@@ -28,6 +28,21 @@ namespace WeatherStationServer
             weatherService.OnWarningRaised += (sender, warning) =>
             {
                 WriteEvent($"UPOZORENJE: {warning}", ConsoleColor.Yellow);
+            };
+
+            weatherService.OnSHSpike += (sender, message) =>
+            {
+                WriteEvent($"SH SPIKE DETEKTOVAN: {message}", ConsoleColor.Magenta);
+            };
+
+            weatherService.OnHISpike += (sender, message) =>
+            {
+                WriteEvent($"HI SPIKE DETEKTOVAN: {message}", ConsoleColor.Red);
+            };
+
+            weatherService.OnOutOfBandWarning += (sender, message) =>
+            {
+                WriteEvent($"SH OUT OF BOUNDS: {message}", ConsoleColor.DarkYellow);
             };
 
             using (ServiceHost host = new ServiceHost(typeof(WeatherService)))

@@ -9,6 +9,10 @@ namespace Server.Events
         public event EventHandler<WeatherSample> OnSampleReceived;
         public event EventHandler<string> OnTransferCompleted;
         public event EventHandler<string> OnWarningRaised;
+        public event EventHandler<string> SHSpike;            
+        public event EventHandler<string> OutOfBandWarning;
+        public event EventHandler<string> HISpike;
+
 
         public void RaiseOnTransferStarted(string sessionId)
         {
@@ -22,6 +26,12 @@ namespace Server.Events
             OnSampleReceived?.Invoke(this, sample);
         }
 
+        public void RaiseHISpike(string message)
+        {
+            Console.WriteLine(message);
+            HISpike?.Invoke(this, message);
+        }
+
         public void RaiseOnTransferCompleted(string sessionId)
         {
             Console.WriteLine($"Transfer završen: {sessionId}");
@@ -32,6 +42,18 @@ namespace Server.Events
         {
             Console.WriteLine($"Upozorenje: {warning}");
             OnWarningRaised?.Invoke(this, warning);
+        }
+
+        public void RaiseSHSpike(string message)
+        {
+            Console.WriteLine(message);
+            SHSpike?.Invoke(this, message);
+        }
+
+        public void RaiseOutOfBandWarning(string message)
+        {
+            Console.WriteLine(message);
+            OutOfBandWarning?.Invoke(this, message);
         }
     }
 }

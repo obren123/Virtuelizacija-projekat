@@ -53,6 +53,22 @@ namespace Server.Services
             add { _events.OnWarningRaised += value; }
             remove { _events.OnWarningRaised -= value; }
         }
+        public event EventHandler<string> OnSHSpike
+        {
+            add { _events.SHSpike += value; }
+            remove { _events.SHSpike -= value; }
+        }
+
+        public event EventHandler<string> OnHISpike
+        {
+            add { _events.HISpike += value; }
+            remove { _events.HISpike -= value; }
+        }
+        public event EventHandler<string> OnOutOfBandWarning
+        {
+            add { _events.OutOfBandWarning += value; }
+            remove { _events.OutOfBandWarning -= value; }
+        }
 
         public WeatherService()
         {
@@ -93,39 +109,72 @@ namespace Server.Services
         {
             lock (_lockObject)
             {
-                if (string.IsNullOrEmpty(_sessionId) ||
-                    !_measurementsWriters.ContainsKey(_sessionId) ||
-                    !_rejectsWriters.ContainsKey(_sessionId))
+                try
                 {
-                    throw new FaultException<DataFormatFault>(
-                        new DataFormatFault { Message = "Sesija nije ispravno inicijalizovana. Pozovite StartSession prvo." },
-                        new FaultReason("Sesija nije inicijalizovana"));
+                    if (string.IsNullOrEmpty(_sessionId) ||
+                        !_measurementsWriters.ContainsKey(_sessionId) ||
+                        !_rejectsWriters.ContainsKey(_sessionId))
+                    {
+                        throw new FaultException<DataFormatFault>(
+                            new DataFormatFault { Message = "Sesija nije ispravno inicijalizovana. Pozovite StartSession prvo." },
+                            new FaultReason("Sesija nije inicijalizovana"));
+                    }
+
+                    var mWriter = _measurementsWriters[_sessionId];
+                    var rWriter = _rejectsWriters[_sessionId];
+
+                    if (sample.Date == DateTime.MinValue)
+                    {
+                        rWriter.WriteLine($"{sample.T},{sample.Tpot},{sample.Tdew},{sample.sh},{sample.rh},{sample.Date:o},Neispravan datum");
+                        rWriter.Flush();
+
+                        throw new FaultException<ValidationFault>(
+                            new ValidationFault { Message = "Neispravan datum" },
+                            new FaultReason("Neispravan datum"));
+                    }
+
+                    if (double.IsNaN(sample.sh) || sample.sh < 0 || sample.sh > 100)
+                    {
+                        rWriter.WriteLine($"{sample.T},{sample.Tpot},{sample.Tdew},{sample.sh},{sample.rh},{sample.Date:o},Specifična vlažnost mora biti između 0 i 100");
+                        rWriter.Flush();
+
+                        throw new FaultException<ValidationFault>(
+                            new ValidationFault { Message = "Specifična vlažnost mora biti između 0 i 100" },
+                            new FaultReason("Neispravna specifična vlažnost"));
+                    }
+
+                    AnalyzeSpecificHumidity(sample);
+                    AnalyzeHeatIndex(sample);
+
+                    mWriter.WriteLine($"{sample.T},{sample.Tpot},{sample.Tdew},{sample.sh},{sample.rh},{sample.Date:o}");
+                    mWriter.Flush();
+
+                    _events.RaiseOnSampleReceived(sample);
+
+                    return true;
                 }
+                catch (FaultException)
+                {
+                    // FaultException ide dalje, ali reject je već zapisan gore u validaciji
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Ostale greške idu u rejects
+                    if (!string.IsNullOrEmpty(_sessionId) && _rejectsWriters.ContainsKey(_sessionId))
+                    {
+                        _rejectsWriters[_sessionId].WriteLine(
+                            $"{sample.T},{sample.Tpot},{sample.Tdew},{sample.sh},{sample.rh},{sample.Date:o},{ex.Message}");
+                        _rejectsWriters[_sessionId].Flush();
+                    }
 
-                var mWriter = _measurementsWriters[_sessionId];
-                var rWriter = _rejectsWriters[_sessionId];
-
-                if (sample.Date == DateTime.MinValue)
-                    throw new FaultException<ValidationFault>(
-                        new ValidationFault { Message = "Neispravan datum" },
-                        new FaultReason("Neispravan datum"));
-
-                if (double.IsNaN(sample.sh) || sample.sh < 0 || sample.sh > 100)
-                    throw new FaultException<ValidationFault>(
-                        new ValidationFault { Message = "Specifična vlažnost mora biti između 0 i 100" },
-                        new FaultReason("Neispravna specifična vlažnost"));
-
-                AnalyzeSpecificHumidity(sample);
-                AnalyzeHeatIndex(sample);
-
-                mWriter.WriteLine($"{sample.T},{sample.Tpot},{sample.Tdew},{sample.sh},{sample.rh},{sample.Date:o}");
-                mWriter.Flush();
-
-                _events.RaiseOnSampleReceived(sample);
-
-                return true;
+                    throw new FaultException<DataFormatFault>(
+                        new DataFormatFault { Message = ex.Message },
+                        new FaultReason(ex.Message));
+                }
             }
         }
+
 
         public bool EndSession(string sessionId)
         {
@@ -157,30 +206,31 @@ namespace Server.Services
                 return;
             }
 
-            double change = sample.sh - _previousSh;
-            if (Math.Abs(change) > _shThreshold)
+            double deltaSH = sample.sh - _previousSh;
+
+            // 1) Nagli skok SH → SHSpike
+            if (Math.Abs(deltaSH) > _shThreshold)
             {
-                string trend = change > 0 ? "iznad" : "ispod";
-                _events.RaiseOnWarningRaised(
-                    $"Detektovan nagli skok SH: {Math.Abs(change):F2} ({trend} praga)");
+                string trend = deltaSH > 0 ? "iznad" : "ispod";
+                _events.RaiseSHSpike($"SHSpike detektovan: ΔSH = {deltaSH:F2} ({trend} očekivanog)");
             }
 
+            // 2) Tekući prosek ±25% → OutOfBandWarning
             double minAllowed = _shMean * 0.75;
             double maxAllowed = _shMean * 1.25;
 
             if (sample.sh < minAllowed)
             {
-                _events.RaiseOnWarningRaised(
-                    $"SH preniska: {sample.sh:F2} < {minAllowed:F2}");
+                _events.RaiseOutOfBandWarning($"SH preniska: {sample.sh:F2} < {minAllowed:F2}");
             }
             else if (sample.sh > maxAllowed)
             {
-                _events.RaiseOnWarningRaised(
-                    $"SH previsoka: {sample.sh:F2} > {maxAllowed:F2}");
+                _events.RaiseOutOfBandWarning($"SH previsoka: {sample.sh:F2} > {maxAllowed:F2}");
             }
 
             _previousSh = sample.sh;
         }
+
 
 
         private double CalculateHeatIndex(double temperature, double humidity)
@@ -192,24 +242,36 @@ namespace Server.Services
 
         private void AnalyzeHeatIndex(WeatherSample sample)
         {
-            double currentHi = CalculateHeatIndex(sample.T, sample.rh);
-
-            if (double.IsNaN(_previousHi))
+            lock (_lockObject)
             {
-                _previousHi = currentHi;
-                return;
-            }
+                try
+                {
+                    double currentHi = CalculateHeatIndex(sample.T, sample.rh);
 
-            double difference = currentHi - _previousHi;
-            if (Math.Abs(difference) > _hiThreshold)
-            {
-                string changeType = difference > 0 ? "iznad" : "ispod";
-                _events.RaiseOnWarningRaised(
-                    $"Nagli skok HI: {Math.Abs(difference):F2} ({changeType} očekivanog)");
-            }
+                    if (double.IsNaN(_previousHi))
+                    {
+                        _previousHi = currentHi;
+                        return;
+                    }
 
-            _previousHi = currentHi;
+                    double deltaHI = currentHi - _previousHi;
+
+                    if (Math.Abs(deltaHI) > _hiThreshold)
+                    {
+                        string trend = deltaHI > 0 ? "iznad" : "ispod";
+                        _events.RaiseHISpike($"HISpike detektovan: ΔHI = {deltaHI:F2} ({trend} očekivanog)");
+                    }
+
+                    _previousHi = currentHi;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Greška u AnalyzeHeatIndex: {ex.Message}");
+                }
+            }
         }
+
+
 
 
         protected virtual void Dispose(bool disposing)
