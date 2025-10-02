@@ -2,7 +2,7 @@
 
 namespace Common
 {
-    //z2
+    
     [ServiceContract]
     public interface IServiceContract
     {

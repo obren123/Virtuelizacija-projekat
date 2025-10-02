@@ -19,7 +19,7 @@ namespace Client
                 Directory.CreateDirectory(Path.GetDirectoryName(logPath));
 
             using (var logWriter = new StreamWriter(logPath, true))
-            {
+            { 
                 Log(logWriter, "Pokretanje obrade CSV fajla");
 
                 try

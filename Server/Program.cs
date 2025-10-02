@@ -12,37 +12,37 @@ namespace Server
 
             weatherService.OnTransferStarted += (sender, sessionId) =>
             {
-                WriteEvent($"PRENOS ZAPOČET: {sessionId}", ConsoleColor.Green);
+                WriteEvent($"PRENOS ZAPOČET: {sessionId}");
             };
 
             weatherService.OnSampleReceived += (sender, sample) =>
             {
-                WriteEvent($"UZORAK PRIMLJEN u {sample.Date:yyyy-MM-dd HH:mm:ss}", ConsoleColor.Cyan);
+                WriteEvent($"UZORAK PRIMLJEN u {sample.Date:yyyy-MM-dd HH:mm:ss}");
             };
 
             weatherService.OnTransferCompleted += (sender, sessionId) =>
             {
-                WriteEvent($"PRENOS ZAVRŠEN: {sessionId}", ConsoleColor.Green);
+                WriteEvent($"PRENOS ZAVRŠEN: {sessionId}");
             };
 
             weatherService.OnWarningRaised += (sender, warning) =>
             {
-                WriteEvent($"UPOZORENJE: {warning}", ConsoleColor.Yellow);
+                WriteEvent($"UPOZORENJE: {warning}");
             };
 
             weatherService.OnSHSpike += (sender, message) =>
             {
-                WriteEvent($"SH SPIKE DETEKTOVAN: {message}", ConsoleColor.Magenta);
+                WriteEvent($"SH SPIKE DETEKTOVAN: {message}");
             };
 
             weatherService.OnHISpike += (sender, message) =>
             {
-                WriteEvent($"HI SPIKE DETEKTOVAN: {message}", ConsoleColor.Red);
+                WriteEvent($"HI SPIKE DETEKTOVAN: {message}");
             };
 
             weatherService.OnOutOfBandWarning += (sender, message) =>
             {
-                WriteEvent($"SH OUT OF BOUNDS: {message}", ConsoleColor.DarkYellow);
+                WriteEvent($"SH OUT OF BOUNDS: {message}");
             };
 
             using (ServiceHost host = new ServiceHost(typeof(WeatherService)))
@@ -65,17 +65,15 @@ namespace Server
                 }
                 catch (Exception ex)
                 {
-                    WriteEvent($"GREŠKA: {ex.Message}", ConsoleColor.Red);
+                    WriteEvent($"GREŠKA: {ex.Message}");
                     host.Abort();
                 }
             }
         }
 
-        static void WriteEvent(string message, ConsoleColor color)
+        static void WriteEvent(string message)
         {
-            Console.ForegroundColor = color;
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
-            Console.ResetColor();
         }
     }
 }

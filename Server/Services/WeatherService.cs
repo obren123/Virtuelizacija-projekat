@@ -27,8 +27,8 @@ namespace Server.Services
         private double _hiThreshold;
 
         private readonly object _lockObject = new object();
-        private readonly Dictionary<string, StreamWriter> _measurementsWriters = new Dictionary<string, StreamWriter>();
-        private readonly Dictionary<string, StreamWriter> _rejectsWriters = new Dictionary<string, StreamWriter>();
+        private readonly Dictionary<string, FileWriter> _measurementsWriters = new Dictionary<string, FileWriter>();
+        private readonly Dictionary<string, FileWriter> _rejectsWriters = new Dictionary<string, FileWriter>();
 
         public event EventHandler<string> OnTransferStarted
         {
@@ -153,10 +153,12 @@ namespace Server.Services
 
                     return true;
                 }
-                catch (FaultException)
+                catch (FaultException fex)
                 {
-                    // FaultException ide dalje, ali reject je već zapisan gore u validaciji
-                    throw;
+                    Console.WriteLine(fex.Message);
+                    throw new FaultException<DataFormatFault>(
+                        new DataFormatFault { Message = fex.Message },
+                        new FaultReason(fex.Message));
                 }
                 catch (Exception ex)
                 {
@@ -276,25 +278,26 @@ namespace Server.Services
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (_disposed) return;
+            lock (_lockObject)
             {
                 if (disposing)
                 {
                     FileHelpers.DisposeAll(_measurementsWriters, _rejectsWriters);
                 }
+                _sessionId = null;
                 _disposed = true;
             }
         }
-
         public void Dispose()
         {
             Dispose(true);
             GC.SuppressFinalize(this);
         }
-
         ~WeatherService()
         {
             Dispose(false);
         }
+
     }
 }
